@@ -23,6 +23,16 @@ from sharedutils import monthlypostcount
 from sharedutils import stdlog, dbglog, errlog, honk
 from plotting import trend_posts_per_day, plot_posts_by_group, pie_posts_by_group, plot_posts_by_group_past_7_days
 
+# For RSS Feed
+from xml.etree.ElementTree import Element, SubElement, Comment, tostring
+import xml.sax.saxutils as saxutils
+import uuid
+
+# To create a GUID for RSS Feed 
+def md5GUID(input_string):
+    md5_hash = hashlib.md5(input_string.encode('utf-8')).hexdigest()
+    return md5_hash
+
 def suffix(d):
     return 'th' if 11<=d<=13 else {1:'st',2:'nd',3:'rd'}.get(d%10, 'th')
 
@@ -240,6 +250,51 @@ def profilepage():
         stdlog('profile page for ' + group['name'] + ' generated')
     stdlog('profile page generation complete')
 
+def rssfeed():
+    '''
+    create a RSS Feed with the last 50 entries 
+    '''
+    stdlog('generating RSS Fees')
+    with open('posts.json') as f:
+      data = json.load(f)
+
+    data.sort(key=lambda item: datetime.strptime(item['discovered'], '%Y-%m-%d %H:%M:%S.%f'))
+
+    rss = Element('rss', {'version': '2.0', 'xmlns:atom': 'http://www.w3.org/2005/Atom'})
+    channel = SubElement(rss, 'channel')
+    title = SubElement(channel, 'title')
+    title.text = 'Ransomwatch RSS Feed'
+    link = SubElement(channel, 'link')
+    link.text = 'https://ransomwatch.telemetry.ltd/rss.xml'
+    description = SubElement(channel, 'description')
+    description.text = 'Last 50 entries monitoring by ransomwatch'
+
+    # Add atom:link element
+    atom_link = SubElement(channel, 'atom:link', href='https://ransomwatch.telemetry.ltd/rss.xml', rel='self', type='application/rss+xml')
+
+    # Parcourez les données du fichier JSON et ajoutez un élément item pour chaque enregistrement
+    for i in reversed(range(len(data)-50, len(data))):
+      item = data[i]
+      rss_item = SubElement(channel, 'item')
+      item_title = SubElement(rss_item, 'title')
+      item_title.text = "🏴‍☠️ " + str(item['group_name']) + " has just published a new victim : " + str(item['post_title']).replace('&amp;','&')
+      item_link = SubElement(rss_item, 'link')
+      item_link.text = 'https://ransomwatch.telemetry.ltd/#/profiles?id={}'.format(item['group_name'])
+  
+      item_guid = SubElement(rss_item, 'guid')
+      item_guid.text = 'https://ransomwatch.telemetry.ltd/#/profiles?id=' + str(item['group_name'])  + '?' +md5GUID(item_title.text)
+  
+      date_iso = item['published']
+      date_rfc822 = datetime.strptime(date_iso, '%Y-%m-%d %H:%M:%S.%f').strftime('%a, %d %b %Y %H:%M:%S +0000')
+  
+      item_pubdate = SubElement(rss_item, 'pubDate')
+      item_pubdate.text = date_rfc822
+
+    rss_str = tostring(rss, encoding='unicode')
+    with open('./docs/rss.xml', 'w') as f:
+      f.write(rss_str)
+    stdlog('RSS Feed page generation complete')
+
 def main():
     stdlog('generating doco')
     mainpage()
@@ -247,6 +302,7 @@ def main():
     recentpage()
     statspage()
     profilepage()
+    rssfeed()
     # if posts.json has been modified within the last 10 mins, assume new posts discovered and recreate graphs
     if os.path.getmtime('posts.json') > (time.time() - 600):
         stdlog('posts.json has been modified within the last 45 mins, assuming new posts discovered and recreating graphs')
