@@ -255,9 +255,7 @@ def rssfeed():
     create a RSS Feed with the last 50 entries 
     '''
     stdlog('generating RSS Fees')
-    with open('posts.json') as f:
-      data = json.load(f)
-
+    data = openjson('posts.json')
     data.sort(key=lambda item: datetime.strptime(item['discovered'], '%Y-%m-%d %H:%M:%S.%f'))
 
     rss = Element('rss', {'version': '2.0', 'xmlns:atom': 'http://www.w3.org/2005/Atom'})
